@@ -1,0 +1,6 @@
+@App_CreditosEducativos_HostAddress = http://localhost:5008
+
+GET {{App_CreditosEducativos_HostAddress}}/Créditos Educativos/
+Accept: application/json
+
+###
