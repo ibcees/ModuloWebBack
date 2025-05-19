@@ -7,19 +7,17 @@ using System.Collections.Generic;
 using System.Data;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using System.Data.Entity;
+using System.Net.Mail;
+using System.Net;
 
 namespace App_CreditosEducativos.Controllers
 {
     [ApiController]
     [Route("api/Usuarios")]
-    public class UsuariosController : ControllerBase
+    public class UsuariosController(IConfiguration configuration) : ControllerBase
     {
-        private readonly string _connectionString;
-        // Constructor donde se inyecta la cadena de conexión
-        public UsuariosController(IConfiguration configuration)
-        {
-            _connectionString = configuration.GetConnectionString("ConexionCreditos");
-        }
+        private readonly string? _connectionString = configuration.GetConnectionString("ConexionCreditos");
 
         // GET: api/Usuarios/ConsultarUsuarios
         [HttpGet]
@@ -47,7 +45,8 @@ namespace App_CreditosEducativos.Controllers
                             Nombre = reader.GetString(reader.GetOrdinal("Nombre")),
                             Usuario1 = reader.GetString(reader.GetOrdinal("Usuario")),
                             Correo = reader.GetString(reader.GetOrdinal("Correo")),
-                            Contraseña = reader.GetString(reader.GetOrdinal("Contraseña"))
+                            Contraseña = reader.GetString(reader.GetOrdinal("Contraseña")),
+                            Rol = reader.GetString(reader.GetOrdinal("Rol")) 
                         };
                         usuarios.Add(usuario);
                     }
@@ -60,13 +59,13 @@ namespace App_CreditosEducativos.Controllers
 
         // POST: api/Usuarios
         [HttpPost("RegistrarUsuario")]
-        public async Task<ActionResult<int>> CreateUsuario([FromBody] UsuariosModel usuario)
+        public async Task<ActionResult<string>> CreateUsuario([FromBody] UsuariosModel usuario)
         {
             int nuevoId = 0;
 
             using (var connection = new SqlConnection(_connectionString))
             {
-                var  addCmd = new SqlCommand("InsertarUsuario_Proc", connection)
+                var addCmd = new SqlCommand("InsertarUsuario_Proc", connection)
                 {
                     CommandType = CommandType.StoredProcedure
                 };
@@ -74,16 +73,24 @@ namespace App_CreditosEducativos.Controllers
                 addCmd.Parameters.AddWithValue("@usuario", usuario.Usuario1);
                 addCmd.Parameters.AddWithValue("@correo", usuario.Correo);
                 addCmd.Parameters.AddWithValue("@contraseña", usuario.Contraseña);
+                addCmd.Parameters.AddWithValue("@rol", usuario.Rol);
 
                 await connection.OpenAsync();
                 nuevoId = Convert.ToInt32(await addCmd.ExecuteScalarAsync());
             }
 
-            return Ok(nuevoId);
+            if (nuevoId == -1)
+            {
+                return Conflict("El usuario o correo ya están registrados.");
+            }
+
+            return Ok(new { mensaje = $"Usuario registrado exitosamente con ID: {nuevoId}" });
         }
 
+
         [HttpPut("ModificarUsuario")]
-        public async Task<ActionResult> ActualizarUsuario([FromQuery] int id, [FromBody] UsuariosModel usuario)
+        public async Task<ActionResult> ActualizarUsuario([FromQuery] int id, [FromBody] 
+        UsuariosModel usuario)
         {
             if (usuario == null)
             {
@@ -104,7 +111,7 @@ namespace App_CreditosEducativos.Controllers
                     using (var checkCommand = new SqlCommand("SELECT COUNT(*) FROM usuarios WHERE id = @id", connection))
                     {
                         checkCommand.Parameters.AddWithValue("@id", id);
-                        int userExists = (int)await checkCommand.ExecuteScalarAsync();
+                        int? userExists = (int?)await checkCommand.ExecuteScalarAsync();
 
                         if (userExists == 0)
                         {
@@ -116,10 +123,11 @@ namespace App_CreditosEducativos.Controllers
                     {
                         updateCommand.CommandType = CommandType.StoredProcedure;
                         updateCommand.Parameters.AddWithValue("@id", usuario.Id);
-                        updateCommand.Parameters.AddWithValue("@nombre", GetDbValue(usuario.Nombre));
-                        updateCommand.Parameters.AddWithValue("@usuario", GetDbValue(usuario.Usuario1));
-                        updateCommand.Parameters.AddWithValue("@correo", GetDbValue(usuario.Correo));
+                        updateCommand.Parameters.AddWithValue("@nombre",usuario.Nombre);
+                        updateCommand.Parameters.AddWithValue("@usuario", usuario.Usuario1);
+                        updateCommand.Parameters.AddWithValue("@correo", usuario.Correo);
                         updateCommand.Parameters.AddWithValue("@contraseña", usuario.Contraseña ?? (object)DBNull.Value);
+                        updateCommand.Parameters.AddWithValue("@rol", usuario.Rol);
 
                         int rowsAffected = await updateCommand.ExecuteNonQueryAsync();
 
@@ -129,7 +137,7 @@ namespace App_CreditosEducativos.Controllers
                         }
                     }
                 }
-                return Ok("Usuario actualizado exitosamente.");
+                return Ok(new { mensaje = "Usuario actualizado exitosamente." });
             }
             catch (Exception ex)
             {
@@ -163,7 +171,7 @@ namespace App_CreditosEducativos.Controllers
         [Route("ConsultarUsuario")]
         public async Task<ActionResult<UsuariosModel>> GetUsuario([FromQuery] int id)
         {
-            UsuariosModel usuario = null;
+            UsuariosModel? usuario = null;
 
             try
             {
@@ -174,7 +182,7 @@ namespace App_CreditosEducativos.Controllers
                         CommandType = CommandType.StoredProcedure
                     };
 
-                    // Agregar el parámetro de ID
+                    // parámetro de ID
                     getCmd.Parameters.AddWithValue("@id", id);
 
                     await connection.OpenAsync();  // Conexión asincrónica
@@ -190,7 +198,8 @@ namespace App_CreditosEducativos.Controllers
                                 Nombre = reader.GetString(reader.GetOrdinal("Nombre")),
                                 Usuario1 = reader.GetString(reader.GetOrdinal("Usuario")),
                                 Correo = reader.GetString(reader.GetOrdinal("Correo")),
-                                Contraseña = reader.GetString(reader.GetOrdinal("Contraseña"))
+                                Contraseña = reader.GetString(reader.GetOrdinal("Contraseña")),
+                                Rol = reader.GetString(reader.GetOrdinal("Rol"))
                             };
                         }
                     }
@@ -209,9 +218,48 @@ namespace App_CreditosEducativos.Controllers
             }
         }
 
-        private object GetDbValue(string value)
+        [HttpPut("InicioSesion")]
+        public async Task<ActionResult> InicioSesion([FromQuery] string usuario1, [FromQuery] string contraseña)
         {
-            return string.IsNullOrEmpty(value) ? DBNull.Value : value;
+            if (string.IsNullOrWhiteSpace(usuario1) || string.IsNullOrWhiteSpace(contraseña))
+            {
+                return BadRequest("Debe proporcionar usuario y contraseña.");
+            }
+
+            using (var connection = new SqlConnection(_connectionString))
+            {
+                var cmd = new SqlCommand("SELECT * FROM Usuarios WHERE Usuario = @usuario", connection);
+                cmd.Parameters.AddWithValue("@usuario", usuario1);
+
+                await connection.OpenAsync();
+                using (var reader = await cmd.ExecuteReaderAsync())
+                {
+                    if (await reader.ReadAsync())
+                    {
+                        string contraseñaBD = reader.GetString(reader.GetOrdinal("Contraseña"));
+
+                        if (contraseñaBD == contraseña)
+                        {
+                            return Ok(new
+                            {
+                                mensaje = "Inicio de sesión exitoso",
+                                Nombre = reader.GetString(reader.GetOrdinal("Nombre")),
+                                Usuario1 = reader.GetString(reader.GetOrdinal("Usuario")),
+                                Correo = reader.GetString(reader.GetOrdinal("Correo")),
+                                Rol = reader.GetString(reader.GetOrdinal("Rol")),
+                            });
+                        }
+                        else
+                        {
+                            return Unauthorized("Contraseña incorrecta.");
+                        }
+                    }
+                    else
+                    {
+                        return NotFound("Usuario no encontrado.");
+                    }
+                }
+            }
         }
     }
  }

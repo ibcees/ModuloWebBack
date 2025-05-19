@@ -1,6 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using App_CreditosEducativos.Models;
 using App_CreditosEducativos.Data;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 
 namespace App_CreditosEducativos
 {
@@ -27,6 +31,7 @@ namespace App_CreditosEducativos
             builder.Services.AddControllersWithViews();
             builder.Services.AddRazorPages();
 
+
             var app = builder.Build();
 
             // Configuración del entorno de desarrollo
@@ -47,6 +52,7 @@ namespace App_CreditosEducativos
             app.UseStaticFiles();
             app.UseRouting();
             app.UseAuthorization();
+            app.UseAuthentication();
 
             app.MapControllerRoute(
                 name: "default",

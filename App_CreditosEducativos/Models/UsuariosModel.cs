@@ -14,14 +14,18 @@ public partial class UsuariosModel
     public int Id { get; set; }
 
     [Column("nombre")]
-    public string Nombre { get; set; }
+    public string? Nombre { get; set; }
 
     [Column("usuario")]
-    public string Usuario1 { get; set; } 
+    public string? Usuario1 { get; set; } 
 
     [Column("correo")]
-    public string Correo { get; set; } 
+    public string? Correo { get; set; } 
 
     [Column("contraseña")]
-    public string Contraseña { get; set; } 
+    public string? Contraseña { get; set; }
+
+    [Column("rol")]
+
+    public string? Rol { get; set; }
 }
