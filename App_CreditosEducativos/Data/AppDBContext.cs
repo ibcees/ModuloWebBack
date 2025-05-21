@@ -21,8 +21,7 @@ public partial class AppDBContext : DbContext
     public virtual DbSet<UsuariosModel> Usuarios { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-        => optionsBuilder.UseSqlServer("Server=10.10.7.46;Database=CreditoE;User Id=desarrollo;Password=dev123;TrustServerCertificate=True;");
-
+        => optionsBuilder.UseSqlServer("Server=tcp:10.10.7.50\\MSSQLSERVER,1433;Database=CreditoE;persist security info=True;User ID=creditoeducati;Password=js84rx69;Trusted_Connection=False;MultipleActiveResultSets=true;Connection Timeout=30");
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<UsuariosModel>(entity =>
